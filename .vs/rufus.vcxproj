@@ -365,6 +365,7 @@
     <ClCompile Include="..\src\re.c" />
     <ClCompile Include="..\src\rufus.c" />
     <ClCompile Include="..\src\checksum.c" />
+    <ClCompile Include="..\src\cpu_features.c" />
     <ClCompile Include="..\src\smart.c" />
     <ClCompile Include="..\src\stdfn.c" />
     <ClCompile Include="..\src\stdio.c" />
@@ -380,6 +381,7 @@
     <ClInclude Include="..\res\grub\grub_version.h" />
     <ClInclude Include="..\src\badblocks.h" />
     <ClInclude Include="..\src\bled\bled.h" />
+    <ClInclude Include="..\src\cpu_features.h" />
     <ClInclude Include="..\src\drive.h" />
     <ClInclude Include="..\src\format.h" />
     <ClInclude Include="..\src\gpt_types.h" />

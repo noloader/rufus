@@ -69,6 +69,9 @@
     <ClCompile Include="..\src\checksum.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\cpu_features.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\pki.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -138,6 +141,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\hdd_vs_ufd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\cpu_features.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\drive.h">

@@ -66,7 +66,25 @@
 #include "missing.h"
 #include "resource.h"
 #include "msapi_utf8.h"
+#include "cpu_features.h"
 #include "localization.h"
+
+/* Includes for SHA-1 and SHA-256 intrinsics */
+#if defined(RUFUS_X86_SHA1_AVAILABLE) || defined(RUFUS_X86_SHA256_AVAILABLE)
+# if defined(_MSC_VER)
+#  include <immintrin.h>
+# endif
+# if defined(__GNUC__)
+#  include <stdint.h>
+#  include <x86intrin.h>
+# endif
+#endif
+
+#if defined(_MSC_VER)
+# define RUFUS_ENABLE_GCC_ARCH(arch)
+#else
+# define RUFUS_ENABLE_GCC_ARCH(arch) __attribute__ ((target (arch)))
+#endif
 
 #undef BIG_ENDIAN_HOST
 
@@ -208,7 +226,7 @@ static void sha512_init(SUM_CONTEXT* ctx)
 }
 
 /* Transform the message X which consists of 16 32-bit-words (SHA-1) */
-static void sha1_transform(SUM_CONTEXT *ctx, const uint8_t *data)
+static void sha1_transform_cc(SUM_CONTEXT *ctx, const uint8_t *data)
 {
 	uint32_t a, b, c, d, e, tm, x[16];
 
@@ -341,8 +359,229 @@ static void sha1_transform(SUM_CONTEXT *ctx, const uint8_t *data)
 	ctx->state[4] += e;
 }
 
+#ifdef RUFUS_X86_SHA1_AVAILABLE
+/*
+ * Transform the message X which consists of 16 32-bit-words (SHA-1)
+ * The code is public domain taken from https://github.com/noloader/SHA-Intrinsics.
+ */
+RUFUS_ENABLE_GCC_ARCH("ssse3,sse4.1,sha")
+static void sha1_transform_x86(uint64_t state64[5], const uint8_t *data, size_t length)
+{
+	__m128i ABCD, E0, E1;
+	__m128i MSG0, MSG1, MSG2, MSG3;
+	const __m128i MASK = _mm_set_epi64x(0x0001020304050607ULL, 0x08090a0b0c0d0e0fULL);
+
+	/* This step is unusual. Rufus used uint64_t for the state array. Unpack it. */
+	uint32_t state[5] = {
+		(uint32_t)state64[0], (uint32_t)state64[1], (uint32_t)state64[2], (uint32_t)state64[3],
+		(uint32_t)state64[4]
+	};
+
+	/* Load initial values */
+	ABCD = _mm_loadu_si128((const __m128i*) state);
+	E0 = _mm_set_epi32(state[4], 0, 0, 0);
+	ABCD = _mm_shuffle_epi32(ABCD, 0x1B);
+
+	while (length >= 64)
+	{
+		/* Save current state  */
+		const __m128i ABCD_SAVE = ABCD;
+		const __m128i E0_SAVE = E0;
+
+		/* Rounds 0-3 */
+		MSG0 = _mm_loadu_si128((const __m128i*)(data + 0));
+		MSG0 = _mm_shuffle_epi8(MSG0, MASK);
+		E0 = _mm_add_epi32(E0, MSG0);
+		E1 = ABCD;
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E0, 0);
+
+		/* Rounds 4-7 */
+		MSG1 = _mm_loadu_si128((const __m128i*)(data + 16));
+		MSG1 = _mm_shuffle_epi8(MSG1, MASK);
+		E1 = _mm_sha1nexte_epu32(E1, MSG1);
+		E0 = ABCD;
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E1, 0);
+		MSG0 = _mm_sha1msg1_epu32(MSG0, MSG1);
+
+		/* Rounds 8-11 */
+		MSG2 = _mm_loadu_si128((const __m128i*)(data + 32));
+		MSG2 = _mm_shuffle_epi8(MSG2, MASK);
+		E0 = _mm_sha1nexte_epu32(E0, MSG2);
+		E1 = ABCD;
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E0, 0);
+		MSG1 = _mm_sha1msg1_epu32(MSG1, MSG2);
+		MSG0 = _mm_xor_si128(MSG0, MSG2);
+
+		/* Rounds 12-15 */
+		MSG3 = _mm_loadu_si128((const __m128i*)(data + 48));
+		MSG3 = _mm_shuffle_epi8(MSG3, MASK);
+		E1 = _mm_sha1nexte_epu32(E1, MSG3);
+		E0 = ABCD;
+		MSG0 = _mm_sha1msg2_epu32(MSG0, MSG3);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E1, 0);
+		MSG2 = _mm_sha1msg1_epu32(MSG2, MSG3);
+		MSG1 = _mm_xor_si128(MSG1, MSG3);
+
+		/* Rounds 16-19 */
+		E0 = _mm_sha1nexte_epu32(E0, MSG0);
+		E1 = ABCD;
+		MSG1 = _mm_sha1msg2_epu32(MSG1, MSG0);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E0, 0);
+		MSG3 = _mm_sha1msg1_epu32(MSG3, MSG0);
+		MSG2 = _mm_xor_si128(MSG2, MSG0);
+
+		/* Rounds 20-23 */
+		E1 = _mm_sha1nexte_epu32(E1, MSG1);
+		E0 = ABCD;
+		MSG2 = _mm_sha1msg2_epu32(MSG2, MSG1);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E1, 1);
+		MSG0 = _mm_sha1msg1_epu32(MSG0, MSG1);
+		MSG3 = _mm_xor_si128(MSG3, MSG1);
+
+		/* Rounds 24-27 */
+		E0 = _mm_sha1nexte_epu32(E0, MSG2);
+		E1 = ABCD;
+		MSG3 = _mm_sha1msg2_epu32(MSG3, MSG2);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E0, 1);
+		MSG1 = _mm_sha1msg1_epu32(MSG1, MSG2);
+		MSG0 = _mm_xor_si128(MSG0, MSG2);
+
+		/* Rounds 28-31 */
+		E1 = _mm_sha1nexte_epu32(E1, MSG3);
+		E0 = ABCD;
+		MSG0 = _mm_sha1msg2_epu32(MSG0, MSG3);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E1, 1);
+		MSG2 = _mm_sha1msg1_epu32(MSG2, MSG3);
+		MSG1 = _mm_xor_si128(MSG1, MSG3);
+
+		/* Rounds 32-35 */
+		E0 = _mm_sha1nexte_epu32(E0, MSG0);
+		E1 = ABCD;
+		MSG1 = _mm_sha1msg2_epu32(MSG1, MSG0);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E0, 1);
+		MSG3 = _mm_sha1msg1_epu32(MSG3, MSG0);
+		MSG2 = _mm_xor_si128(MSG2, MSG0);
+
+		/* Rounds 36-39 */
+		E1 = _mm_sha1nexte_epu32(E1, MSG1);
+		E0 = ABCD;
+		MSG2 = _mm_sha1msg2_epu32(MSG2, MSG1);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E1, 1);
+		MSG0 = _mm_sha1msg1_epu32(MSG0, MSG1);
+		MSG3 = _mm_xor_si128(MSG3, MSG1);
+
+		/* Rounds 40-43 */
+		E0 = _mm_sha1nexte_epu32(E0, MSG2);
+		E1 = ABCD;
+		MSG3 = _mm_sha1msg2_epu32(MSG3, MSG2);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E0, 2);
+		MSG1 = _mm_sha1msg1_epu32(MSG1, MSG2);
+		MSG0 = _mm_xor_si128(MSG0, MSG2);
+
+		/* Rounds 44-47 */
+		E1 = _mm_sha1nexte_epu32(E1, MSG3);
+		E0 = ABCD;
+		MSG0 = _mm_sha1msg2_epu32(MSG0, MSG3);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E1, 2);
+		MSG2 = _mm_sha1msg1_epu32(MSG2, MSG3);
+		MSG1 = _mm_xor_si128(MSG1, MSG3);
+
+		/* Rounds 48-51 */
+		E0 = _mm_sha1nexte_epu32(E0, MSG0);
+		E1 = ABCD;
+		MSG1 = _mm_sha1msg2_epu32(MSG1, MSG0);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E0, 2);
+		MSG3 = _mm_sha1msg1_epu32(MSG3, MSG0);
+		MSG2 = _mm_xor_si128(MSG2, MSG0);
+
+		/* Rounds 52-55 */
+		E1 = _mm_sha1nexte_epu32(E1, MSG1);
+		E0 = ABCD;
+		MSG2 = _mm_sha1msg2_epu32(MSG2, MSG1);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E1, 2);
+		MSG0 = _mm_sha1msg1_epu32(MSG0, MSG1);
+		MSG3 = _mm_xor_si128(MSG3, MSG1);
+
+		/* Rounds 56-59 */
+		E0 = _mm_sha1nexte_epu32(E0, MSG2);
+		E1 = ABCD;
+		MSG3 = _mm_sha1msg2_epu32(MSG3, MSG2);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E0, 2);
+		MSG1 = _mm_sha1msg1_epu32(MSG1, MSG2);
+		MSG0 = _mm_xor_si128(MSG0, MSG2);
+
+		/* Rounds 60-63 */
+		E1 = _mm_sha1nexte_epu32(E1, MSG3);
+		E0 = ABCD;
+		MSG0 = _mm_sha1msg2_epu32(MSG0, MSG3);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E1, 3);
+		MSG2 = _mm_sha1msg1_epu32(MSG2, MSG3);
+		MSG1 = _mm_xor_si128(MSG1, MSG3);
+
+		/* Rounds 64-67 */
+		E0 = _mm_sha1nexte_epu32(E0, MSG0);
+		E1 = ABCD;
+		MSG1 = _mm_sha1msg2_epu32(MSG1, MSG0);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E0, 3);
+		MSG3 = _mm_sha1msg1_epu32(MSG3, MSG0);
+		MSG2 = _mm_xor_si128(MSG2, MSG0);
+
+		/* Rounds 68-71 */
+		E1 = _mm_sha1nexte_epu32(E1, MSG1);
+		E0 = ABCD;
+		MSG2 = _mm_sha1msg2_epu32(MSG2, MSG1);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E1, 3);
+		MSG3 = _mm_xor_si128(MSG3, MSG1);
+
+		/* Rounds 72-75 */
+		E0 = _mm_sha1nexte_epu32(E0, MSG2);
+		E1 = ABCD;
+		MSG3 = _mm_sha1msg2_epu32(MSG3, MSG2);
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E0, 3);
+
+		/* Rounds 76-79 */
+		E1 = _mm_sha1nexte_epu32(E1, MSG3);
+		E0 = ABCD;
+		ABCD = _mm_sha1rnds4_epu32(ABCD, E1, 3);
+
+		/* Combine state */
+		E0 = _mm_sha1nexte_epu32(E0, E0_SAVE);
+		ABCD = _mm_add_epi32(ABCD, ABCD_SAVE);
+
+		data += 64;
+		length -= 64;
+	}
+
+	/* Save state */
+	ABCD = _mm_shuffle_epi32(ABCD, 0x1B);
+	_mm_storeu_si128((__m128i*) state, ABCD);
+	state[4] = _mm_extract_epi32(E0, 3);
+
+	/* This step is unusual. Rufus used uint64_t for the state array. Repack it. */
+	state64[0] = state[0]; state64[1] = state[1]; state64[2] = state[2]; state64[3] = state[3];
+	state64[4] = state[4];
+}
+#endif  /* RUFUS_X86_SHA1_AVAILABLE */
+
+/* Transform the message X which consists of 16 32-bit-words (SHA-1) */
+static void sha1_transform(SUM_CONTEXT *ctx, const uint8_t *data)
+{
+#ifdef RUFUS_X86_SHA1_AVAILABLE
+	if (HasSHA1())
+	{
+		/* SHA-1 acceleration using intrinsics */
+		sha1_transform_x86(ctx->state, data, 64u);
+	}
+	else
+#endif
+	{
+		/* Portable C/C++ implementation */
+		sha1_transform_cc(ctx, data);
+	}
+}
+
 /* Transform the message X which consists of 16 32-bit-words (SHA-256) */
-static __inline void sha256_transform(SUM_CONTEXT *ctx, const uint8_t *data)
+static __inline void sha256_transform_cc(SUM_CONTEXT *ctx, const uint8_t *data)
 {
 	uint32_t a, b, c, d, e, f, g, h, j, x[16];
 
@@ -413,6 +652,231 @@ static __inline void sha256_transform(SUM_CONTEXT *ctx, const uint8_t *data)
 	ctx->state[5] += f;
 	ctx->state[6] += g;
 	ctx->state[7] += h;
+}
+
+#ifdef RUFUS_X86_SHA256_AVAILABLE
+/*
+ * Transform the message X which consists of 16 32-bit-words (SHA-256)
+ * The code is public domain taken from https://github.com/noloader/SHA-Intrinsics.
+ */
+RUFUS_ENABLE_GCC_ARCH("ssse3,sse4.1,sha")
+static __inline void sha256_transform_x86(uint64_t state64[8], const uint8_t *data, size_t length)
+{
+	__m128i STATE0, STATE1;
+	__m128i MSG, TMP;
+	__m128i MSG0, MSG1, MSG2, MSG3;
+	const __m128i MASK = _mm_set_epi64x(0x0c0d0e0f08090a0bULL, 0x0405060700010203ULL);
+
+	/* This step is unusual. Rufus used uint64_t for the state array. Unpack it. */
+	uint32_t state[8] = {
+		(uint32_t)state64[0], (uint32_t)state64[1], (uint32_t)state64[2], (uint32_t)state64[3],
+		(uint32_t)state64[4], (uint32_t)state64[5], (uint32_t)state64[6], (uint32_t)state64[7]
+	};
+
+	/* Load initial values */
+	TMP = _mm_loadu_si128((const __m128i*) (state+0));
+	STATE1 = _mm_loadu_si128((const __m128i*) (state+4));
+
+	TMP = _mm_shuffle_epi32(TMP, 0xB1);          /* CDAB */
+	STATE1 = _mm_shuffle_epi32(STATE1, 0x1B);    /* EFGH */
+	STATE0 = _mm_alignr_epi8(TMP, STATE1, 8);    /* ABEF */
+	STATE1 = _mm_blend_epi16(STATE1, TMP, 0xF0); /* CDGH */
+
+	while (length >= 64)
+	{
+		/* Save current state */
+		const __m128i ABEF_SAVE = STATE0;
+		const __m128i CDGH_SAVE = STATE1;
+
+		/* Rounds 0-3 */
+		MSG = _mm_loadu_si128((const __m128i*) (data+0));
+		MSG0 = _mm_shuffle_epi8(MSG, MASK);
+		MSG = _mm_add_epi32(MSG0, _mm_set_epi64x(0xE9B5DBA5B5C0FBCFULL, 0x71374491428A2F98ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+
+		/* Rounds 4-7 */
+		MSG1 = _mm_loadu_si128((const __m128i*) (data+16));
+		MSG1 = _mm_shuffle_epi8(MSG1, MASK);
+		MSG = _mm_add_epi32(MSG1, _mm_set_epi64x(0xAB1C5ED5923F82A4ULL, 0x59F111F13956C25BULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG0 = _mm_sha256msg1_epu32(MSG0, MSG1);
+
+		/* Rounds 8-11 */
+		MSG2 = _mm_loadu_si128((const __m128i*) (data+32));
+		MSG2 = _mm_shuffle_epi8(MSG2, MASK);
+		MSG = _mm_add_epi32(MSG2, _mm_set_epi64x(0x550C7DC3243185BEULL, 0x12835B01D807AA98ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG1 = _mm_sha256msg1_epu32(MSG1, MSG2);
+
+		/* Rounds 12-15 */
+		MSG3 = _mm_loadu_si128((const __m128i*) (data+48));
+		MSG3 = _mm_shuffle_epi8(MSG3, MASK);
+		MSG = _mm_add_epi32(MSG3, _mm_set_epi64x(0xC19BF1749BDC06A7ULL, 0x80DEB1FE72BE5D74ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG3, MSG2, 4);
+		MSG0 = _mm_add_epi32(MSG0, TMP);
+		MSG0 = _mm_sha256msg2_epu32(MSG0, MSG3);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG2 = _mm_sha256msg1_epu32(MSG2, MSG3);
+
+		/* Rounds 16-19 */
+		MSG = _mm_add_epi32(MSG0, _mm_set_epi64x(0x240CA1CC0FC19DC6ULL, 0xEFBE4786E49B69C1ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG0, MSG3, 4);
+		MSG1 = _mm_add_epi32(MSG1, TMP);
+		MSG1 = _mm_sha256msg2_epu32(MSG1, MSG0);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG3 = _mm_sha256msg1_epu32(MSG3, MSG0);
+
+		/* Rounds 20-23 */
+		MSG = _mm_add_epi32(MSG1, _mm_set_epi64x(0x76F988DA5CB0A9DCULL, 0x4A7484AA2DE92C6FULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG1, MSG0, 4);
+		MSG2 = _mm_add_epi32(MSG2, TMP);
+		MSG2 = _mm_sha256msg2_epu32(MSG2, MSG1);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG0 = _mm_sha256msg1_epu32(MSG0, MSG1);
+
+		/* Rounds 24-27 */
+		MSG = _mm_add_epi32(MSG2, _mm_set_epi64x(0xBF597FC7B00327C8ULL, 0xA831C66D983E5152ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG2, MSG1, 4);
+		MSG3 = _mm_add_epi32(MSG3, TMP);
+		MSG3 = _mm_sha256msg2_epu32(MSG3, MSG2);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG1 = _mm_sha256msg1_epu32(MSG1, MSG2);
+
+		/* Rounds 28-31 */
+		MSG = _mm_add_epi32(MSG3, _mm_set_epi64x(0x1429296706CA6351ULL,  0xD5A79147C6E00BF3ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG3, MSG2, 4);
+		MSG0 = _mm_add_epi32(MSG0, TMP);
+		MSG0 = _mm_sha256msg2_epu32(MSG0, MSG3);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG2 = _mm_sha256msg1_epu32(MSG2, MSG3);
+
+		/* Rounds 32-35 */
+		MSG = _mm_add_epi32(MSG0, _mm_set_epi64x(0x53380D134D2C6DFCULL, 0x2E1B213827B70A85ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG0, MSG3, 4);
+		MSG1 = _mm_add_epi32(MSG1, TMP);
+		MSG1 = _mm_sha256msg2_epu32(MSG1, MSG0);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG3 = _mm_sha256msg1_epu32(MSG3, MSG0);
+
+		/* Rounds 36-39 */
+		MSG = _mm_add_epi32(MSG1, _mm_set_epi64x(0x92722C8581C2C92EULL, 0x766A0ABB650A7354ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG1, MSG0, 4);
+		MSG2 = _mm_add_epi32(MSG2, TMP);
+		MSG2 = _mm_sha256msg2_epu32(MSG2, MSG1);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG0 = _mm_sha256msg1_epu32(MSG0, MSG1);
+
+		/* Rounds 40-43 */
+		MSG = _mm_add_epi32(MSG2, _mm_set_epi64x(0xC76C51A3C24B8B70ULL, 0xA81A664BA2BFE8A1ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG2, MSG1, 4);
+		MSG3 = _mm_add_epi32(MSG3, TMP);
+		MSG3 = _mm_sha256msg2_epu32(MSG3, MSG2);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG1 = _mm_sha256msg1_epu32(MSG1, MSG2);
+
+		/* Rounds 44-47 */
+		MSG = _mm_add_epi32(MSG3, _mm_set_epi64x(0x106AA070F40E3585ULL, 0xD6990624D192E819ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG3, MSG2, 4);
+		MSG0 = _mm_add_epi32(MSG0, TMP);
+		MSG0 = _mm_sha256msg2_epu32(MSG0, MSG3);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG2 = _mm_sha256msg1_epu32(MSG2, MSG3);
+
+		/* Rounds 48-51 */
+		MSG = _mm_add_epi32(MSG0, _mm_set_epi64x(0x34B0BCB52748774CULL, 0x1E376C0819A4C116ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG0, MSG3, 4);
+		MSG1 = _mm_add_epi32(MSG1, TMP);
+		MSG1 = _mm_sha256msg2_epu32(MSG1, MSG0);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+		MSG3 = _mm_sha256msg1_epu32(MSG3, MSG0);
+
+		/* Rounds 52-55 */
+		MSG = _mm_add_epi32(MSG1, _mm_set_epi64x(0x682E6FF35B9CCA4FULL, 0x4ED8AA4A391C0CB3ULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG1, MSG0, 4);
+		MSG2 = _mm_add_epi32(MSG2, TMP);
+		MSG2 = _mm_sha256msg2_epu32(MSG2, MSG1);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+
+		/* Rounds 56-59 */
+		MSG = _mm_add_epi32(MSG2, _mm_set_epi64x(0x8CC7020884C87814ULL, 0x78A5636F748F82EEULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		TMP = _mm_alignr_epi8(MSG2, MSG1, 4);
+		MSG3 = _mm_add_epi32(MSG3, TMP);
+		MSG3 = _mm_sha256msg2_epu32(MSG3, MSG2);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+
+		/* Rounds 60-63 */
+		MSG = _mm_add_epi32(MSG3, _mm_set_epi64x(0xC67178F2BEF9A3F7ULL, 0xA4506CEB90BEFFFAULL));
+		STATE1 = _mm_sha256rnds2_epu32(STATE1, STATE0, MSG);
+		MSG = _mm_shuffle_epi32(MSG, 0x0E);
+		STATE0 = _mm_sha256rnds2_epu32(STATE0, STATE1, MSG);
+
+		/* Combine state  */
+		STATE0 = _mm_add_epi32(STATE0, ABEF_SAVE);
+		STATE1 = _mm_add_epi32(STATE1, CDGH_SAVE);
+
+		data += 64;
+		length -= 64;
+	}
+
+	TMP = _mm_shuffle_epi32(STATE0, 0x1B);       /* FEBA */
+	STATE1 = _mm_shuffle_epi32(STATE1, 0xB1);    /* DCHG */
+	STATE0 = _mm_blend_epi16(TMP, STATE1, 0xF0); /* DCBA */
+	STATE1 = _mm_alignr_epi8(STATE1, TMP, 8);    /* ABEF */
+
+	/* Save state */
+	_mm_storeu_si128((__m128i*) (state+0), STATE0);
+	_mm_storeu_si128((__m128i*) (state+4), STATE1);
+
+	/* This step is unusual. Rufus used uint64_t for the state array. Repack it. */
+	state64[0] = state[0]; state64[1] = state[1]; state64[2] = state[2]; state64[3] = state[3];
+	state64[4] = state[4]; state64[5] = state[5]; state64[6] = state[6]; state64[7] = state[7];
+}
+#endif  /* RUFUS_X86_SHA256_AVAILABLE */
+
+static __inline void sha256_transform(SUM_CONTEXT *ctx, const uint8_t *data)
+{
+#ifdef RUFUS_X86_SHA256_AVAILABLE
+	if (HasSHA256())
+	{
+		/* SHA-256 acceleration using intrinsics */
+		sha256_transform_x86(ctx->state, data, 64u);
+	}
+	else
+#endif
+	{
+		/* Portable C/C++ implementation */
+		sha256_transform_cc(ctx, data);
+	}
 }
 
 /*
@@ -618,12 +1082,29 @@ static void sha1_write(SUM_CONTEXT *ctx, const uint8_t *buf, size_t len)
 		len -= num;
 	}
 
-	/* Process data in blocksize chunks */
-	while (len >= SHA1_BLOCKSIZE) {
-		PREFETCH64(buf + SHA1_BLOCKSIZE);
-		sha1_transform(ctx, buf);
-		buf += SHA1_BLOCKSIZE;
-		len -= SHA1_BLOCKSIZE;
+#ifdef RUFUS_X86_SHA1_AVAILABLE
+	if (HasSHA1())
+	{
+		/* Process all full blocks at once */
+		if (len >= SHA1_BLOCKSIZE) {
+			/* Calculate full blocks, in bytes */
+			num = (len / SHA1_BLOCKSIZE) * SHA1_BLOCKSIZE;
+			/* SHA-1 acceleration using intrinsics */
+			sha1_transform_x86(ctx->state, buf, num);
+			buf += num;
+			len -= num;
+		}
+	}
+	else
+#endif
+	{
+		/* Process data in blocksize chunks */
+		while (len >= SHA1_BLOCKSIZE) {
+			PREFETCH64(buf + SHA1_BLOCKSIZE);
+			sha1_transform(ctx, buf);
+			buf += SHA1_BLOCKSIZE;
+			len -= SHA1_BLOCKSIZE;
+		}
 	}
 
 	/* Handle any remaining bytes of data. */
@@ -653,12 +1134,29 @@ static void sha256_write(SUM_CONTEXT *ctx, const uint8_t *buf, size_t len)
 		len -= num;
 	}
 
-	/* Process data in blocksize chunks */
-	while (len >= SHA256_BLOCKSIZE) {
-		PREFETCH64(buf + SHA256_BLOCKSIZE);
-		sha256_transform(ctx, buf);
-		buf += SHA256_BLOCKSIZE;
-		len -= SHA256_BLOCKSIZE;
+#ifdef RUFUS_X86_SHA256_AVAILABLE
+	if (HasSHA256())
+	{
+		/* Process all full blocks at once */
+		if (len >= SHA256_BLOCKSIZE) {
+			/* Calculate full blocks, in bytes */
+			num = (len / SHA256_BLOCKSIZE) * SHA256_BLOCKSIZE;
+			/* SHA-256 acceleration using intrinsics */
+			sha256_transform_x86(ctx->state, buf, num);
+			buf += num;
+			len -= num;
+		}
+	}
+	else
+#endif
+	{
+		/* Process data in blocksize chunks */
+		while (len >= SHA256_BLOCKSIZE) {
+			PREFETCH64(buf + SHA256_BLOCKSIZE);
+			sha256_transform(ctx, buf);
+			buf += SHA256_BLOCKSIZE;
+			len -= SHA256_BLOCKSIZE;
+		}
 	}
 
 	/* Handle any remaining bytes of data. */
