@@ -70,18 +70,26 @@
 
 /*
  * Returns TRUE if the cpu supports SHA-1 acceleration, FALSE otherwise.
- * Note: this is a runtime check, not a compile time check. If the compiler
- * does not support SHA acceleration, then the function returns FALSE even
- * if the cpu supports the acceleration.
+ * Note: this is a runtime check, not a compile time check. If the platform
+ * and compiler do not support SHA acceleration, then the function returns
+ * FALSE evenif the cpu supports the acceleration.
  */
-extern BOOL HasSHA1();
+extern BOOL HasSHA1(void);
 
 /*
  * Returns TRUE if the cpu supports SHA-256 acceleration, FALSE otherwise.
- * Note: this is a runtime check, not a compile time check. If the compiler
- * does not support SHA acceleration, then the function returns FALSE even
- * if the cpu supports the acceleration.
+ * Note: this is a runtime check, not a compile time check. If the platform
+ * and compiler do not support SHA acceleration, then the function returns
+ * FALSE evenif the cpu supports the acceleration.
  */
-extern BOOL HasSHA256();
+extern BOOL HasSHA256(void);
+
+/*
+ * Returns TRUE if the cpu supports SHA-512 acceleration, FALSE otherwise.
+ * Note: this is a runtime check, not a compile time check. If the platform
+ * and compiler do not support SHA acceleration, then the function returns
+ * FALSE evenif the cpu supports the acceleration.
+ */
+extern BOOL HasSHA512(void);
 
 #endif  /* RUFUS_CPU_FEATURES_INCLUDED */

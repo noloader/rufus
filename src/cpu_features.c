@@ -24,13 +24,19 @@
  * Third, the platform must support a static initializer. And fourth,
  * the cpu must actually support the SHA-1 and SHA-256 instructions.
  *
- * If all of the conditions are not met, then HasSHA1() and HasSHA256()
- * return FALSE.
+ * If any of the conditions are not met, then HasSHA1() and HasSHA256()
+ * return FALSE. HasSHA512() always returns FALSE at the moment because
+ * x86 processors do not currently provide instructions for the
+ * algorithm. Other processors do provide SHA512 acceleration, so we
+ * stubbed it out.
  *
  * The code does not use extraordinary means to accomplish the four
- * goals. For example, we could write our own cpuid() function, but
- * we don't. We rely on the platform to provide it to keep things
- * simple. It is easy to go into the weeds with cpu features.
+ * goals. For example, we could write our own cpuid() function and
+ * extend support back to early Windows, but we don't. We rely on the
+ * platform to provide it to keep things simple. It is easy to go into
+ * the weeds with topics like cpu features, static initialization,
+ * and emitting byte codes for mnemonics when the compiler does not
+ * support an ISA like SHA.
  */
 
 #include "cpu_features.h"
@@ -54,10 +60,17 @@ static const BOOL s_sha1 = DetectSHA1();
 #elif defined(RUFUS_GCC_COMPILER) || defined(RUFUS_INTEL_VERSION) || defined(RUFUS_LLVM_CLANG_VERSION)
 static const BOOL s_sha1 __attribute__ ((init_priority (100))) = DetectSHA1();
 #else
+/* Catch all. We may say FALSE even if the cpu supports SHA acceleration. */
 static const BOOL s_sha1 = FALSE;
 #endif
 
-BOOL DetectSHA1()
+/*
+ * Detect if the processor supports SHA-1 acceleration. We only check for the
+ * three ISAs we need - SSSE3, SSE4.1 and SHA. We don't check for XSAVE because
+ * that's been enabled since Windows 2000. Rufus minimum Windows version is
+ * currently Windows 7 (and soon to change), so it's a moot point nowadays.
+ */
+BOOL DetectSHA1(void)
 {
 #if defined(RUFUS_MSC_COMPILER)
 	unint32_t regs0[4] = {0,0,0,0}, regs1[4] = {0,0,0,0}, regs7[4] = {0,0,0,0};
@@ -95,10 +108,17 @@ static const BOOL s_sha256 = DetectSHA256();
 #elif defined(RUFUS_GCC_COMPILER) || defined(RUFUS_INTEL_VERSION) || defined(RUFUS_LLVM_CLANG_VERSION)
 static const BOOL s_sha256 __attribute__ ((init_priority (100))) = DetectSHA256();
 #else
+/* Catch all. We may say FALSE even if the cpu supports SHA acceleration. */
 static const BOOL s_sha256 = FALSE;
 #endif
 
-BOOL DetectSHA256()
+/*
+ * Detect if the processor supports SHA-256 acceleration. We only check for the
+ * three ISAs we need - SSSE3, SSE4.1 and SHA. We don't check for XSAVE because
+ * that's been enabled since Windows 2000. Rufus minimum Windows version is
+ * currently Windows 7 (and soon to change), so it's a moot point nowadays.
+ */
+BOOL DetectSHA256(void)
 {
 #if defined(RUFUS_MSC_COMPILER)
 	unint32_t regs0[4] = {0,0,0,0}, regs1[4] = {0,0,0,0}, regs7[4] = {0,0,0,0};
@@ -135,7 +155,7 @@ BOOL DetectSHA256()
  * does not support SHA acceleration, then the function returns FALSE even
  * if the cpu supports the acceleration.
  */
-BOOL HasSHA1()
+BOOL HasSHA1(void)
 {
 #ifdef RUFUS_X86_SHA1_AVAILABLE
 	return s_sha1;
@@ -150,11 +170,23 @@ BOOL HasSHA1()
  * does not support SHA acceleration, then the function returns FALSE even
  * if the cpu supports the acceleration.
  */
-BOOL HasSHA256()
+BOOL HasSHA256(void)
 {
 #ifdef RUFUS_X86_SHA256_AVAILABLE
 	return s_sha256;
 #else
 	return FALSE;
 #endif
+}
+
+/*
+ * Returns TRUE if the cpu supports SHA-256 acceleration, FALSE otherwise.
+ * Note: this is a runtime check, not a compile time check. If the compiler
+ * does not support SHA acceleration, then the function returns FALSE even
+ * if the cpu supports the acceleration.
+ */
+BOOL HasSHA512(void)
+{
+	/* Not available yet on x86 */
+	return FALSE;
 }

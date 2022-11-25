@@ -1801,7 +1801,7 @@ uint8_t* to_bin(const char* str)
 	return ret;
 }
 
-const char* test_msg = "Did you ever hear the tragedy of Darth Plagueis The Wise? "
+const char test_msg[] = "Did you ever hear the tragedy of Darth Plagueis The Wise? "
 	"I thought not. It's not a story the Jedi would tell you. It's a Sith legend. "
 	"Darth Plagueis was a Dark Lord of the Sith, so powerful and so wise he could "
 	"use the Force to influence the midichlorians to create life... He had such a "
@@ -1853,6 +1853,12 @@ int TestChecksum(void)
 	char* msg = malloc(full_msg_len + 1);
 	if (msg == NULL)
 		return -1;
+
+	/* Display accelerations available */
+	uprintf("HasSHA1: %s, HasSHA256: %s, HasSHA512: %s",
+			(HasSHA1() ? "TRUE" : "FALSE"),
+			(HasSHA256() ? "TRUE" : "FALSE"),
+			(HasSHA512() ? "TRUE" : "FALSE"));
 
 	for (j = 0; j < CHECKSUM_MAX; j++) {
 		size_t copy_msg_len[4];
