@@ -18,6 +18,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
+ * cpu_features was added to support SHA instructions on x86 machines.
+ * SHA acceleration is becoming as ubiquitous as AES acceleration.
+ * SHA support was introduced in Intel Goldmont architecture, like
+ * Celeron J3455 and Pentium J4205. The instructions are now present
+ * in AMD Ryzen 3 (Zen architecture) and above, and Intel Core
+ * 10th-gen processors (Ice Lake), 11th-gen processors (Rocket Lake)
+ * and above.
+ *
+ * Typical benchmarks for x86 SHA acceleration is about a 6x to 10x
+ * speedup over a C/C++ implementation. The rough measurements are
+ * 1.0 to 1.8 cpb for SHA-1, and 1.5 to 2.5 cpb for SHA-256. On a
+ * Celeron J3455, that's 1.1 GB/s for SHA-1 and 800 MB/s for SHA-256.
+ * On a 10th-gen Core i5, that's about 1.65 GB/s for SHA-1 and about
+ * 1.3 GB/s for SHA-256.
+ */
+
 #ifndef RUFUS_CPU_FEATURES_INCLUDED
 #define RUFUS_CPU_FEATURES_INCLUDED
 
