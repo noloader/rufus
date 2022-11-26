@@ -56,6 +56,11 @@
 #include "../res/grub/grub_version.h"
 #include "../res/grub2/grub2_version.h"
 
+/* For testing SHA acceleration */
+#if defined(_DEBUG) || defined(TEST)
+extern int TestChecksum(void);
+#endif
+
 enum bootcheck_return {
 	BOOTCHECK_PROCEED = 0,
 	BOOTCHECK_CANCEL = -1,
@@ -322,7 +327,7 @@ static void SetPartitionSchemeAndTargetSystem(BOOL only_target)
 			selected_pt = PARTITION_STYLE_GPT;
 		// Try to reselect the current drive's partition scheme
 		int preferred_pt = SelectedDrive.PartitionStyle;
-		if (allowed_partition_scheme[PARTITION_STYLE_MBR]) 
+		if (allowed_partition_scheme[PARTITION_STYLE_MBR])
 			IGNORE_RETVAL(ComboBox_SetItemData(hPartitionScheme,
 				ComboBox_AddStringU(hPartitionScheme, "MBR"), PARTITION_STYLE_MBR));
 		if (allowed_partition_scheme[PARTITION_STYLE_GPT])
@@ -331,7 +336,7 @@ static void SetPartitionSchemeAndTargetSystem(BOOL only_target)
 		if (allowed_partition_scheme[PARTITION_STYLE_SFD])
 			IGNORE_RETVAL(ComboBox_SetItemData(hPartitionScheme,
 				ComboBox_AddStringU(hPartitionScheme, sfd_name), PARTITION_STYLE_SFD));
-		// Override the partition scheme according to the current 
+		// Override the partition scheme according to the current
 		if (boot_type == BT_NON_BOOTABLE)
 			preferred_pt = (selected_pt >= 0) ? selected_pt : PARTITION_STYLE_MBR;
 		else if (boot_type == BT_UEFI_NTFS)
@@ -1556,7 +1561,7 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 					ShellExecuteA(hMainDialog, "open", SEVENZIP_URL, NULL, NULL, SW_SHOWNORMAL);
 				goto out;
 			}
-		} else if ( ((fs_type == FS_NTFS) && !HAS_WINDOWS(img_report) && !HAS_GRUB(img_report) && 
+		} else if ( ((fs_type == FS_NTFS) && !HAS_WINDOWS(img_report) && !HAS_GRUB(img_report) &&
 					 (!HAS_SYSLINUX(img_report) || (SL_MAJOR(img_report.sl_version) <= 5)))
 				 || ((IS_FAT(fs_type)) && (!HAS_SYSLINUX(img_report)) && (!allow_dual_uefi_bios) && !IS_EFI_BOOTABLE(img_report) &&
 					 (!HAS_REACTOS(img_report)) && !HAS_KOLIBRIOS(img_report) && (!HAS_GRUB(img_report)))

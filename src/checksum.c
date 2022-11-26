@@ -1778,7 +1778,7 @@ BOOL IsFileInDB(const char* path)
 	return FALSE;
 }
 
-#if defined(_DEBUG)
+#if defined(_DEBUG) || defined(TEST)
 /* Convert a lowercase hex string to binary. Returned value must be freed */
 uint8_t* to_bin(const char* str)
 {
@@ -1855,10 +1855,9 @@ int TestChecksum(void)
 		return -1;
 
 	/* Display accelerations available */
-	uprintf("HasSHA1: %s, HasSHA256: %s, HasSHA512: %s",
-			(HasSHA1() ? "TRUE" : "FALSE"),
-			(HasSHA256() ? "TRUE" : "FALSE"),
-			(HasSHA512() ? "TRUE" : "FALSE"));
+	uprintf("SHA1   acceleration: %s", (HasSHA1() ? "TRUE" : "FALSE"));
+	uprintf("SHA256 acceleration: %s", (HasSHA1() ? "TRUE" : "FALSE"));
+	uprintf("SHA512 acceleration: %s", (HasSHA1() ? "TRUE" : "FALSE"));
 
 	for (j = 0; j < CHECKSUM_MAX; j++) {
 		size_t copy_msg_len[4];
@@ -1887,4 +1886,4 @@ int TestChecksum(void)
 	free(msg);
 	return errors;
 }
-#endif
+#endif  /* _DEBUG or TEST */
