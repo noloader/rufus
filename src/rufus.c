@@ -56,7 +56,7 @@
 #include "../res/grub/grub_version.h"
 #include "../res/grub2/grub2_version.h"
 
-/* For testing SHA acceleration */
+/* For SHA acceleration debug testing */
 #if defined(_DEBUG) || defined(TEST)
 extern int TestChecksum(void);
 #endif

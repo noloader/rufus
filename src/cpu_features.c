@@ -66,8 +66,8 @@ static const BOOL s_sha1 = FALSE;
 
 /*
  * Detect if the processor supports SHA-1 acceleration. We only check for the
- * three ISAs we need - SSSE3, SSE4.1 and SHA. We don't check for XSAVE because
- * that's been enabled since Windows 2000. Rufus minimum Windows version is
+ * three ISAs we need - SSSE3, SSE4.1 and SHA. We don't check for OS suuport or
+ * XSAVE because that's been enabled since Windows 2000. The Rufus minimum is
  * currently Windows 7 (and soon to change), so it's a moot point nowadays.
  */
 BOOL DetectSHA1(void)
@@ -114,8 +114,8 @@ static const BOOL s_sha256 = FALSE;
 
 /*
  * Detect if the processor supports SHA-256 acceleration. We only check for the
- * three ISAs we need - SSSE3, SSE4.1 and SHA. We don't check for XSAVE because
- * that's been enabled since Windows 2000. Rufus minimum Windows version is
+ * three ISAs we need - SSSE3, SSE4.1 and SHA. We don't check for OS suuport or
+ * XSAVE because that's been enabled since Windows 2000. The Rufus minimum is
  * currently Windows 7 (and soon to change), so it's a moot point nowadays.
  */
 BOOL DetectSHA256(void)
@@ -180,7 +180,7 @@ BOOL HasSHA256(void)
 }
 
 /*
- * Returns TRUE if the cpu supports SHA-256 acceleration, FALSE otherwise.
+ * Returns TRUE if the cpu supports SHA-512 acceleration, FALSE otherwise.
  * Note: this is a runtime check, not a compile time check. If the compiler
  * does not support SHA acceleration, then the function returns FALSE even
  * if the cpu supports the acceleration.
