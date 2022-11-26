@@ -2,7 +2,7 @@
  * Rufus: The Reliable USB Formatting Utility
  * Device detection and enumeration
  * Copyright © 2014-2022 Pete Batard <pete@akeo.ie>
- *                       Jeffrey Walton <noloader@gmail.com>
+ * Copyright © 2022 Jeffrey Walton <noloader@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

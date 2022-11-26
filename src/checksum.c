@@ -6,6 +6,7 @@
  * Copyright © 2004 g10 Code GmbH
  * Copyright © 2002-2015 Wei Dai & Igor Pavlov
  * Copyright © 2015-2021 Pete Batard <pete@akeo.ie>
+ * Copyright © 2022 Jeffrey Walton <noloader@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -371,7 +372,7 @@ static void sha1_transform_x86(uint64_t state64[5], const uint8_t *data, size_t 
 	__m128i MSG0, MSG1, MSG2, MSG3;
 	const __m128i MASK = _mm_set_epi64x(0x0001020304050607ULL, 0x08090a0b0c0d0e0fULL);
 
-	/* This step is unusual. Rufus used uint64_t for the state array. Unpack it. */
+	/* This step is unusual. Rufus used uint64_t for the state array. Pack it into uint32_t. */
 	uint32_t state[5] = {
 		(uint32_t)state64[0], (uint32_t)state64[1], (uint32_t)state64[2], (uint32_t)state64[3],
 		(uint32_t)state64[4]
@@ -557,7 +558,7 @@ static void sha1_transform_x86(uint64_t state64[5], const uint8_t *data, size_t 
 	_mm_storeu_si128((__m128i*) state, ABCD);
 	state[4] = _mm_extract_epi32(E0, 3);
 
-	/* This step is unusual. Rufus used uint64_t for the state array. Repack it. */
+	/* This step is unusual. Rufus used uint64_t for the state array. Repack it into uint64_t. */
 	state64[0] = state[0]; state64[1] = state[1]; state64[2] = state[2]; state64[3] = state[3];
 	state64[4] = state[4];
 }
@@ -667,7 +668,7 @@ static __inline void sha256_transform_x86(uint64_t state64[8], const uint8_t *da
 	__m128i MSG0, MSG1, MSG2, MSG3;
 	const __m128i MASK = _mm_set_epi64x(0x0c0d0e0f08090a0bULL, 0x0405060700010203ULL);
 
-	/* This step is unusual. Rufus used uint64_t for the state array. Unpack it. */
+	/* This step is unusual. Rufus used uint64_t for the state array. Pack it into uint32_t. */
 	uint32_t state[8] = {
 		(uint32_t)state64[0], (uint32_t)state64[1], (uint32_t)state64[2], (uint32_t)state64[3],
 		(uint32_t)state64[4], (uint32_t)state64[5], (uint32_t)state64[6], (uint32_t)state64[7]
@@ -857,7 +858,7 @@ static __inline void sha256_transform_x86(uint64_t state64[8], const uint8_t *da
 	_mm_storeu_si128((__m128i*) (state+0), STATE0);
 	_mm_storeu_si128((__m128i*) (state+4), STATE1);
 
-	/* This step is unusual. Rufus used uint64_t for the state array. Repack it. */
+	/* This step is unusual. Rufus used uint64_t for the state array. Repack it into uint64_t. */
 	state64[0] = state[0]; state64[1] = state[1]; state64[2] = state[2]; state64[3] = state[3];
 	state64[4] = state[4]; state64[5] = state[5]; state64[6] = state[6]; state64[7] = state[7];
 }
