@@ -1855,9 +1855,9 @@ int TestChecksum(void)
 		return -1;
 
 	/* Display accelerations available */
-	uprintf("SHA1   acceleration: %s", (HasSHA1() ? "TRUE" : "FALSE"));
-	uprintf("SHA256 acceleration: %s", (HasSHA1() ? "TRUE" : "FALSE"));
-	uprintf("SHA512 acceleration: %s", (HasSHA1() ? "TRUE" : "FALSE"));
+	uprintf("SHA1   acceleration: %s", (  HasSHA1() ? "TRUE" : "FALSE"));
+	uprintf("SHA256 acceleration: %s", (HasSHA256() ? "TRUE" : "FALSE"));
+	uprintf("SHA512 acceleration: %s", (HasSHA512() ? "TRUE" : "FALSE"));
 
 	for (j = 0; j < CHECKSUM_MAX; j++) {
 		size_t copy_msg_len[4];
