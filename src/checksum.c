@@ -383,7 +383,7 @@ static void sha1_transform_x86(uint64_t state64[5], const uint8_t *data, size_t 
 	E0 = _mm_set_epi32(state[4], 0, 0, 0);
 	ABCD = _mm_shuffle_epi32(ABCD, 0x1B);
 
-	while (length >= 64)
+	while (length >= SHA1_BLOCKSIZE)
 	{
 		/* Save current state  */
 		const __m128i ABCD_SAVE = ABCD;
@@ -571,7 +571,7 @@ static void sha1_transform(SUM_CONTEXT *ctx, const uint8_t *data)
 	if (HasSHA1())
 	{
 		/* SHA-1 acceleration using intrinsics */
-		sha1_transform_x86(ctx->state, data, 64u);
+		sha1_transform_x86(ctx->state, data, SHA1_BLOCKSIZE);
 	}
 	else
 #endif
@@ -683,7 +683,7 @@ static __inline void sha256_transform_x86(uint64_t state64[8], const uint8_t *da
 	STATE0 = _mm_alignr_epi8(TMP, STATE1, 8);    /* ABEF */
 	STATE1 = _mm_blend_epi16(STATE1, TMP, 0xF0); /* CDGH */
 
-	while (length >= 64)
+	while (length >= SHA256_BLOCKSIZE)
 	{
 		/* Save current state */
 		const __m128i ABEF_SAVE = STATE0;
@@ -870,7 +870,7 @@ static __inline void sha256_transform(SUM_CONTEXT *ctx, const uint8_t *data)
 	if (HasSHA256())
 	{
 		/* SHA-256 acceleration using intrinsics */
-		sha256_transform_x86(ctx->state, data, 64u);
+		sha256_transform_x86(ctx->state, data, SHA256_BLOCKSIZE);
 	}
 	else
 #endif
